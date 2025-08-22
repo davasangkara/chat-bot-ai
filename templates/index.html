@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>AI Dava ↔ {{ target }} – Chat</title>
+  <style>
+    :root{
+      --bg:#0b0f17; --card:#101827; --muted:#9fb0d9; --text:#ecf1ff;
+      --accent:#84b6ff; --accent-2:#b68cff; --pink:#ff9fd3; --green:#93f2c5;
+      --border:rgba(255,255,255,.08); --shadow:0 12px 40px rgba(0,0,0,.35);
+      --vh: 1vh;                    /* di-override via JS utk mobile */
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; color:var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+      background:
+        radial-gradient(1300px 700px at -10% -20%, #1c2250 0%, transparent 60%),
+        radial-gradient(900px 500px  at 120% -10%, #2a1e56 0%, transparent 60%),
+        linear-gradient(180deg, #0b0f17 0%, #0e1422 100%);
+      /* body tidak scroll; yang scroll hanya area chat */
+      overflow:hidden;
+    }
+
+    /* dekor pastel */
+    .bg-bubbles::before, .bg-bubbles::after{
+      content:""; position:absolute; width:160px; height:160px; border-radius:36px;
+      filter:blur(30px); opacity:.35; z-index:0;
+    }
+    .bg-bubbles::before{ top:-40px; left:-30px; background: radial-gradient(closest-side, var(--pink), transparent); transform: rotate(12deg); }
+    .bg-bubbles::after { right:-30px; bottom:-30px; background: radial-gradient(closest-side, var(--accent-2), transparent); transform: rotate(-8deg); }
+
+    .wrap{
+      max-width:1100px;
+      height: calc(var(--vh) * 100 - clamp(12px, 3vh, 32px));
+      margin: clamp(6px,1.5vh,16px) auto;
+      padding: 0 clamp(10px, 3vw, 20px);
+      position:relative;
+    }
+
+    .app{
+      position:relative; height:100%;
+      display:flex; flex-direction:column;
+      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+
+    /* Header */
+    .header{
+      display:flex; flex-wrap:wrap; align-items:center; gap:10px 12px;
+      padding:12px clamp(12px, 3vw, 16px);
+      background: linear-gradient(90deg, rgba(132,182,255,.25), rgba(182,140,255,.25));
+      border-bottom:1px solid var(--border); backdrop-filter: blur(6px);
+    }
+    .title{ font-size:clamp(16px, 2.2vw, 18px); font-weight:700; letter-spacing:.3px; display:flex; align-items:center; gap:10px;}
+    .sub{ color:var(--muted); font-size:clamp(11px, 1.8vw, 12px); flex:1 1 auto; min-width:200px;}
+    .avatars{ margin-left:auto; display:flex; align-items:center; gap:8px; }
+    .avatar{
+      width:32px; height:32px; border-radius:50%; border:1px solid var(--border);
+      display:grid; place-items:center; font-weight:700; font-size:12px; background:#121a2c;
+    }
+    .badge-heart{
+      display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%;
+      background: radial-gradient(closest-side, #ff9fd3, #ff7cbc); color:#2b0d1e; font-weight:900; font-size:12px;
+      box-shadow: 0 6px 18px rgba(255,124,188,.45);
+    }
+
+    /* Chat area fleksibel & responsif */
+    .chat{
+      position:relative; z-index:1;
+      flex:1 1 auto; /* ambil sisa tinggi antara header & composer */
+      overflow-y:auto; overscroll-behavior:contain;
+      padding: clamp(12px, 2.5vw, 18px) clamp(12px, 3vw, 20px) 20px;
+      display:flex; flex-direction:column; gap:12px;
+      scroll-behavior:smooth;
+    }
+
+    .msg{
+      max-width: min(78%, 680px);
+      padding: 12px 14px; border-radius:16px; line-height:1.5; white-space:pre-wrap;
+      position:relative; animation:pop .18s ease-out;
+      font-size: clamp(14px, 1.9vw, 15px);
+    }
+    @keyframes pop{ from{transform:scale(.98); opacity:0} to{transform:scale(1); opacity:1} }
+
+    .user{ align-self:flex-end; background:linear-gradient(180deg,#1b2948,#16213c); border:1px solid rgba(122,162,255,.35); }
+    .user::after{ content:""; position:absolute; right:-6px; bottom:6px; width:10px; height:10px; background:inherit; transform:rotate(45deg); border-right:1px solid rgba(122,162,255,.35); border-bottom:1px solid rgba(122,162,255,.35);}
+    .bot { align-self:flex-start; background:linear-gradient(180deg,#171c31,#141a2d); border:1px solid rgba(182,140,255,.35); }
+    .bot::after { content:""; position:absolute; left:-6px; bottom:6px; width:10px; height:10px; background:inherit; transform:rotate(45deg); border-left:1px solid rgba(182,140,255,.35); border-bottom:1px solid rgba(182,140,255,.35); }
+
+    .meta{ display:flex; gap:6px; align-items:center; color:var(--muted); font-size:11px; margin-top:4px; opacity:.9; }
+    .tick{ width:8px; height:8px; border-radius:50%; background: var(--green); box-shadow:0 0 0 2px rgba(147,242,197,.25); }
+
+    .typing{ align-self:flex-start; background:linear-gradient(180deg,#171c31,#141a2d); border:1px solid rgba(182,140,255,.35); display:flex; align-items:center; gap:6px; }
+    .dots{ display:inline-flex; gap:6px; align-items:center; }
+    .dot{ width:6px; height:6px; border-radius:50%; background:#cbb2ff; opacity:.6; animation:bounce 1s infinite; }
+    .dot:nth-child(2){ animation-delay:.15s } .dot:nth-child(3){ animation-delay:.3s }
+    @keyframes bounce{ 0%,100%{ transform:translateY(0); opacity:.4 } 50%{ transform:translateY(-4px); opacity:1 } }
+
+    /* Composer lengket di bawah dan aman untuk notch */
+    .composer{
+      position:relative; z-index:2;
+      padding: 10px clamp(12px, 3vw, 16px) calc(10px + var(--safe-bottom));
+      border-top:1px solid var(--border);
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02));
+    }
+    .chips{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 8px; }
+    .chip{
+      font-size:12px; color:#0f1530; cursor:pointer; padding:8px 12px; border-radius:999px; border:0;
+      background: linear-gradient(90deg, #a9e3ff, #ffe0f3); box-shadow: 0 6px 18px rgba(255,255,255,.10); user-select:none;
+      touch-action: manipulation;
+    }
+    .input{ display:flex; gap:10px; align-items:flex-end; }
+    textarea{
+      flex:1; min-height:48px; max-height:36svh; resize:vertical; border-radius:14px;
+      border:1px solid var(--border); background:#0f1627; color:var(--text); padding:12px 14px; outline:none;
+      font-size:16px; /* agar iOS tak zoom */
+    }
+    .btn{
+      border:none; border-radius:14px; padding:12px 16px; font-weight:700; cursor:pointer;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2)); color:white;
+      display:inline-flex; align-items:center; gap:8px; transition: transform .05s ease;
+      box-shadow: 0 8px 22px rgba(132,182,255,.25); touch-action: manipulation;
+    }
+    .btn:active{ transform:translateY(1px) }
+    .btn.ghost{ background:transparent; color:var(--text); border:1px solid var(--border); box-shadow:none; font-weight:600; }
+
+    /* Tombol “ke bawah” */
+    .to-bottom{
+      position:absolute; right:clamp(10px,3vw,16px);
+      bottom: calc(130px + var(--safe-bottom)); z-index:3;
+      display:none; padding:8px 10px; font-size:12px; border-radius:999px;
+      border:1px solid var(--border); background:#0f1627a0; backdrop-filter: blur(6px);
+      color:var(--text); cursor:pointer;
+    }
+    .to-bottom.show{ display:block }
+
+    /* Responsif ekstra kecil */
+    @media (max-width: 480px){
+      .avatars{ display:none }
+      .chips .chip{ padding:7px 10px; font-size:11px }
+      .msg{ max-width: 86% }
+    }
+
+    /* Desktop lebar: beri ruang lebih */
+    @media (min-width: 1000px){
+      .msg{ max-width: 70% }
+    }
+
+    /* Aksesibilitas: kurangi animasi bila preferensi user reduce motion */
+    @media (prefers-reduced-motion: reduce){
+      .msg{ animation: none }
+      .dot{ animation: none }
+      .chat{ scroll-behavior:auto }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="app bg-bubbles">
+      <!-- Header -->
+      <div class="header">
+        <div class="title">
+          <span class="badge-heart">❤</span>
+          <span>AI Dava ↔ {{ target }}</span>
+        </div>
+        <div class="sub">Ngobrol santai, hangat, dan sopan. Aku dengerin ya 🙂</div>
+        <div class="avatars">
+          <div class="avatar" title="Dava">D</div>
+          <div class="avatar" title="{{ target }}">{{ (target or 'Sopi')[:1] }}</div>
+        </div>
+      </div>
+
+      <!-- Chat -->
+      <div id="chat" class="chat" aria-live="polite"></div>
+      <button id="toBottom" class="to-bottom" aria-label="Gulir ke bawah">⬇ ke bawah</button>
+
+      <!-- Composer -->
+      <div class="composer">
+        <div class="chips" role="listbox" aria-label="Contoh cepat">
+          <button class="chip" data-text="Lagi capek banget hari ini, bisa dengerin aku bentar?">Capek 😮‍💨</button>
+          <button class="chip" data-text="Aku lagi overthinking. Menurut kamu, enaknya aku harus mulai dari mana?">Overthinking 🤯</button>
+          <button class="chip" data-text="Boleh minta saran biar hubungan kita nggak hambar?">Biar nggak hambar 💞</button>
+          <button class="chip" data-text="Aku pengen deep talk dikit, boleh?">Deep talk 🔋</button>
+        </div>
+        <div class="input">
+          <textarea id="msg" placeholder="Tulis di sini… (Enter kirim, Shift+Enter baris baru)" aria-label="Ketik pesan"></textarea>
+          <button id="send" class="btn" title="Kirim" aria-label="Kirim">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M3 11l18-8-8 18-2-7-8-3z" stroke="white" stroke-width="1.5" fill="white" />
+            </svg>
+            Kirim
+          </button>
+          <button id="reset" class="btn ghost" title="Reset percakapan" aria-label="Reset percakapan">Reset</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ----- Fix tinggi viewport mobile (100vh yang bener) -----
+    function setAppVH(){
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    }
+    setAppVH();
+    window.addEventListener('resize', setAppVH);
+    window.addEventListener('orientationchange', setAppVH);
+
+    const chatEl   = document.getElementById('chat');
+    const msgEl    = document.getElementById('msg');
+    const sendBtn  = document.getElementById('send');
+    const resetBtn = document.getElementById('reset');
+    const toBottom = document.getElementById('toBottom');
+
+    // Helpers
+    const nowText = () => new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const atBottom = () => chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 20;
+    const scrollToBottom = () => { chatEl.scrollTop = chatEl.scrollHeight; };
+
+    function bubble(content, who='bot', metaText=''){
+      const wrap = document.createElement('div');
+      wrap.className = `msg ${who}`;
+      wrap.textContent = content;
+      chatEl.appendChild(wrap);
+
+      if (metaText){
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.innerHTML = (who === 'user' ? '<span class="tick"></span>' : '') + `<span>${metaText}</span>`;
+        chatEl.appendChild(meta);
+      }
+      if (atBottom()) scrollToBottom(); else toBottom.classList.add('show');
+      return wrap;
+    }
+
+    // Typing indicator
+    let typingEl = null;
+    function showTyping(){
+      if (typingEl) return;
+      typingEl = document.createElement('div');
+      typingEl.className = 'msg typing';
+      typingEl.innerHTML = `<div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
+      chatEl.appendChild(typingEl);
+      if (atBottom()) scrollToBottom();
+    }
+    function hideTyping(){ if (!typingEl) return; typingEl.remove(); typingEl = null; }
+
+    // Send
+    async function send(){
+      const txt = msgEl.value.trim();
+      if (!txt) return;
+
+      bubble(txt, 'user', nowText());
+      msgEl.value = '';
+      msgEl.focus();
+
+      try{
+        sendBtn.disabled = true;
+        showTyping();
+        const r = await fetch('/api/chat', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ message: txt, contact: 'sopia' })
+        });
+        const data = await r.json();
+        hideTyping();
+        sendBtn.disabled = false;
+
+        if (!r.ok) throw new Error(data.error || 'Gagal');
+        bubble(data.reply, 'bot', nowText());
+      }catch(e){
+        hideTyping();
+        sendBtn.disabled = false;
+        bubble('⚠️ ' + e.message, 'bot', nowText());
+      }
+    }
+
+    // Events
+    sendBtn.onclick = send;
+    msgEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+
+    // Saat fokus textarea di mobile, scroll ke bawah biar composer gak ketutup keyboard
+    msgEl.addEventListener('focus', () => setTimeout(scrollToBottom, 80));
+
+    resetBtn.onclick = async () => {
+      try{
+        await fetch('/api/reset', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ contact: 'sopia' })
+        });
+        chatEl.innerHTML = '';
+        bubble('Percakapan direset. Hai, Sopi. Aku dengerin ya. Ada yang lagi kamu rasain?', 'bot', nowText());
+      }catch(e){
+        bubble('⚠️ Gagal reset: ' + e.message, 'bot', nowText());
+      }
+    };
+
+    // Chips
+    document.querySelectorAll('.chip').forEach(ch => {
+      ch.addEventListener('click', () => { msgEl.value = ch.dataset.text; msgEl.focus(); });
+    });
+
+    // Scroll control
+    chatEl.addEventListener('scroll', () => {
+      if (atBottom()) toBottom.classList.remove('show'); else toBottom.classList.add('show');
+    });
+    toBottom.onclick = scrollToBottom;
+
+    // Greeting awal
+    bubble('Hai, Sopi. Gimana kabarmu hari ini? Aku dengerin ya 🙂', 'bot', nowText());
+  </script>
+</body>
+</html>
